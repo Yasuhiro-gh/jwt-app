@@ -27,7 +27,11 @@ func (pdb *PostgresDB) SetNewToken(userID, refreshToken string) error {
 	return nil
 }
 
-func (pdb *PostgresDB) RefreshToken(refreshToken string) error {
+func (pdb *PostgresDB) RefreshToken(userID, refreshToken string) error {
+	_, err := pdb.DB.Exec("UPDATE tokens SET refresh_token = $1 WHERE user_id = $2", refreshToken, userID)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

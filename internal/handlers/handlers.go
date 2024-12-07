@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/Yasuhiro-gh/jwt-app/internal/auth"
 	"github.com/Yasuhiro-gh/jwt-app/internal/usecase"
-	"io"
 	"net/http"
 )
 
@@ -40,7 +39,7 @@ func (th *TokenHandler) GenerateTokenPair() http.HandlerFunc {
 			return
 		}
 
-		hashedToken, err := auth.HashToken(refreshToken)
+		hashedToken, err := usecase.HashToken(refreshToken)
 		if err != nil {
 			http.Error(w, "Can't hash refresh token: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -67,12 +66,16 @@ func (th *TokenHandler) GenerateTokenPair() http.HandlerFunc {
 
 func (th *TokenHandler) Refresh() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Provide refresh token", http.StatusInternalServerError)
+		type tokenResponse struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
 		}
-		refreshToken := string(body)
-		claims, err := auth.GetClaimsFromRefreshToken(refreshToken)
+		tokens := &tokenResponse{}
+		err := json.NewDecoder(r.Body).Decode(tokens)
+		if err != nil {
+			http.Error(w, "Can't decode refresh token: "+err.Error(), http.StatusInternalServerError)
+		}
+		claims, err := auth.GetClaimsFromRefreshToken(tokens.RefreshToken)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -84,27 +87,37 @@ func (th *TokenHandler) Refresh() http.HandlerFunc {
 			return
 		}
 
-		err = auth.CompareHashAndToken(refreshToken, hashedToken)
+		err = usecase.CompareHashAndToken(tokens.RefreshToken, hashedToken)
 		if err != nil {
 			http.Error(w, "Invalid refresh token", http.StatusInternalServerError)
 			return
 		}
 
-		_, newRefreshToken, err := auth.GetRefreshedTokens(claims, r.RemoteAddr)
+		err = auth.ValidateAccessToken(tokens.AccessToken)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		newAccessToken, newRefreshToken, err := auth.GetRefreshedTokens(claims, r.RemoteAddr)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		hashedToken, err = auth.HashToken(newRefreshToken)
+		hashedToken, err = usecase.HashToken(newRefreshToken)
 		if err != nil {
 			http.Error(w, "Can't hash refresh token: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		err = th.SetNewToken(claims.UserID, hashedToken)
+		err = th.RefreshToken(claims.UserID, hashedToken)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(tokenResponse{AccessToken: newAccessToken, RefreshToken: newRefreshToken})
+		if err != nil {
+			http.Error(w, "Can't encode json response: "+err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
