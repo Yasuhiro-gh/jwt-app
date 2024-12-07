@@ -32,7 +32,12 @@ func (th *TokenHandler) GenerateTokenPair() http.HandlerFunc {
 			http.Error(w, "Provide user id in parameters", http.StatusInternalServerError)
 			return
 		}
-		//Todo: Validate user_id
+
+		if err := usecase.ValidateUserID(userID); err != nil {
+			http.Error(w, "Provide valid UUID user id in parameters", http.StatusBadRequest)
+			return
+		}
+
 		accessToken, refreshToken, err := auth.GenerateTokenPair(userID)
 		if err != nil {
 			http.Error(w, "Can't generate jwt tokens: "+err.Error(), http.StatusInternalServerError)
