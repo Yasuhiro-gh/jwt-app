@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/Yasuhiro-gh/jwt-app/internal/usecase"
 	"github.com/golang-jwt/jwt/v5"
-	"strings"
+	"strconv"
 	"time"
 )
 
@@ -28,7 +28,8 @@ func GenerateTokenPair(userID string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	refreshToken := BuildRefreshToken(userID)
+	// Passing there constant IPAddr to `emulate` difference
+	refreshToken := BuildRefreshToken("0.0.0.0")
 	return accessToken, refreshToken, nil
 }
 
@@ -44,33 +45,15 @@ func BuildAccessToken(userID string) (string, error) {
 	return token.SignedString([]byte(SECRETKEY))
 }
 
-func BuildRefreshToken(userID string) string {
-	IPAddr := "0.0.0.0"
-	tokenWithPayload := userID + "\n" + IPAddr
+func BuildRefreshToken(IPAddr string) string {
+	now := time.Now().Unix()
+	stringNow := strconv.FormatInt(now, 10)
+	tokenWithPayload := stringNow + "\n" + IPAddr
 	encodedToken := usecase.EncodeToken(tokenWithPayload)
 	return encodedToken
 }
 
-func GetClaimsFromRefreshToken(refreshToken string) (*RefreshClaims, error) {
-	decodedToken, err := usecase.DecodeToken(refreshToken)
-	if err != nil {
-		return &RefreshClaims{}, errors.New("token parse error: " + err.Error())
-	}
-
-	splitedDecodedToken := strings.Split(decodedToken, "\n")
-	if len(splitedDecodedToken) != 2 {
-		return &RefreshClaims{}, errors.New("invalid refresh token")
-	}
-
-	claims := &RefreshClaims{UserID: splitedDecodedToken[0], IPAddr: splitedDecodedToken[1]}
-	if claims.UserID == "" || claims.IPAddr == "" {
-		return &RefreshClaims{}, errors.New("invalid refresh token: Empty payload")
-	}
-
-	return claims, nil
-}
-
-func GetRefreshedTokens(claims *RefreshClaims, IPAddr string) (string, string, error) {
+func GetRefreshedTokens(claims *AccessClaims, IPAddr string) (string, string, error) {
 	if claims.IPAddr != IPAddr {
 		usecase.SendEmail()
 	}
@@ -78,8 +61,9 @@ func GetRefreshedTokens(claims *RefreshClaims, IPAddr string) (string, string, e
 	return GenerateTokenPair(claims.UserID)
 }
 
-func ValidateAccessToken(accessToken string) error {
-	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
+func GetAccessClaims(accessToken string) (*AccessClaims, error) {
+	claims := &AccessClaims{}
+	token, err := jwt.ParseWithClaims(accessToken, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -87,11 +71,11 @@ func ValidateAccessToken(accessToken string) error {
 	})
 
 	if err != nil {
-		return errors.New("token parse error: " + err.Error())
+		return &AccessClaims{}, errors.New("access token parse error: " + err.Error())
 	}
 	if !token.Valid {
-		return errors.New("invalid access token")
+		return &AccessClaims{}, errors.New("invalid access token")
 	}
 
-	return nil
+	return claims, nil
 }

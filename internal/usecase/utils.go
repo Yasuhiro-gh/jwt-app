@@ -2,12 +2,10 @@ package usecase
 
 import (
 	"encoding/base64"
-	"fmt"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func HashToken(token string) (string, error) {
-	fmt.Println(token)
 	hashed, err := bcrypt.GenerateFromPassword([]byte(token), bcrypt.MinCost)
 	if err != nil {
 		return "", err

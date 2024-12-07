@@ -75,7 +75,8 @@ func (th *TokenHandler) Refresh() http.HandlerFunc {
 		if err != nil {
 			http.Error(w, "Can't decode refresh token: "+err.Error(), http.StatusInternalServerError)
 		}
-		claims, err := auth.GetClaimsFromRefreshToken(tokens.RefreshToken)
+
+		claims, err := auth.GetAccessClaims(tokens.AccessToken)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -93,11 +94,6 @@ func (th *TokenHandler) Refresh() http.HandlerFunc {
 			return
 		}
 
-		err = auth.ValidateAccessToken(tokens.AccessToken)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-
 		newAccessToken, newRefreshToken, err := auth.GetRefreshedTokens(claims, r.RemoteAddr)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -109,11 +105,13 @@ func (th *TokenHandler) Refresh() http.HandlerFunc {
 			http.Error(w, "Can't hash refresh token: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		err = th.RefreshToken(claims.UserID, hashedToken)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(tokenResponse{AccessToken: newAccessToken, RefreshToken: newRefreshToken})
 		if err != nil {
