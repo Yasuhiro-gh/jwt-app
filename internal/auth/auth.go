@@ -2,18 +2,18 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Yasuhiro-gh/jwt-app/internal/usecase"
 	"github.com/golang-jwt/jwt/v5"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const SECRETKEY = "yasuhiro_gh"
 
 type RefreshClaims struct {
-	IPAddr string
-	UserID string
+	IPAddr    string
+	ExpiresAt string
 }
 
 type AccessClaims struct {
@@ -24,57 +24,51 @@ type AccessClaims struct {
 }
 
 func GenerateTokenPair(userID string) (string, string, error) {
-	accessToken, err := BuildAccessToken(userID)
+	// Passing there constant IPAddr to `emulate` difference
+	refreshToken := BuildRefreshToken("0.0.0.0")
+	accessToken, err := BuildAccessToken(userID, "0.0.0.0")
 	if err != nil {
 		return "", "", err
 	}
-	// Passing there constant IPAddr to `emulate` difference
-	refreshToken := BuildRefreshToken("0.0.0.0")
 	return accessToken, refreshToken, nil
 }
 
-func BuildAccessToken(userID string) (string, error) {
+func BuildAccessToken(userID, IPAddr string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, &AccessClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 10)),
 		},
 		UserID:          userID,
-		IPAddr:          "0.0.0.0",
+		IPAddr:          IPAddr,
 		SomePrivacyInfo: time.Now().String(),
 	})
 	return token.SignedString([]byte(SECRETKEY))
 }
 
 func BuildRefreshToken(IPAddr string) string {
-	now := time.Now().Unix()
-	stringNow := strconv.FormatInt(now, 10)
-	tokenWithPayload := stringNow + "\n" + IPAddr
-	encodedToken := usecase.EncodeToken(tokenWithPayload)
-	return encodedToken
+	expireAt := time.Now().Add(time.Minute * 10).Unix()
+	strExpiresAt := strconv.FormatInt(expireAt, 10)
+	tokenWithPayload := strExpiresAt + "\n" + IPAddr
+	return tokenWithPayload
 }
 
-func GetRefreshedTokens(claims *AccessClaims, IPAddr string) (string, string, error) {
+func GetRefreshedTokens(claims *RefreshClaims, userID, IPAddr string) (string, string, error) {
 	if claims.IPAddr != IPAddr {
 		usecase.SendEmail()
 	}
 
-	return GenerateTokenPair(claims.UserID)
+	return GenerateTokenPair(userID)
 }
 
-func GetAccessClaims(accessToken string) (*AccessClaims, error) {
-	claims := &AccessClaims{}
-	token, err := jwt.ParseWithClaims(accessToken, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(SECRETKEY), nil
-	})
-
-	if err != nil {
-		return &AccessClaims{}, errors.New("access token parse error: " + err.Error())
+func GetRefreshClaims(refreshToken string) (*RefreshClaims, error) {
+	splitedDecodedToken := strings.Split(refreshToken, "\n")
+	if len(splitedDecodedToken) != 2 {
+		return &RefreshClaims{}, errors.New("invalid refresh token")
 	}
-	if !token.Valid {
-		return &AccessClaims{}, errors.New("invalid access token")
+
+	claims := &RefreshClaims{ExpiresAt: splitedDecodedToken[0], IPAddr: splitedDecodedToken[1]}
+	if claims.ExpiresAt == "" || claims.IPAddr == "" {
+		return &RefreshClaims{}, errors.New("invalid refresh token: Empty payload")
 	}
 
 	return claims, nil

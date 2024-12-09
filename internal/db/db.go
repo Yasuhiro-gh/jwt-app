@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"github.com/Yasuhiro-gh/jwt-app/internal/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -20,11 +21,19 @@ func CreateTable(pdb *PostgresDB) error {
 }
 
 func (pdb *PostgresDB) SetNewToken(userID, refreshToken string) error {
-	_, err := pdb.DB.Exec("INSERT INTO tokens (user_id, refresh_token) VALUES ($1, $2)", userID, refreshToken)
-	if err != nil {
-		return err
+	qr := pdb.DB.QueryRow("SELECT user_id FROM tokens WHERE user_id=$1", userID)
+	if qr != nil && qr.Err() != nil {
+		return qr.Err()
 	}
-	return nil
+	err := qr.Scan()
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		_, err = pdb.DB.Exec("INSERT INTO tokens (user_id, refresh_token) VALUES ($1, $2)", userID, refreshToken)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return pdb.RefreshToken(userID, refreshToken)
 }
 
 func (pdb *PostgresDB) RefreshToken(userID, refreshToken string) error {
