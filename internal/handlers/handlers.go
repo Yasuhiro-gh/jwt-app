@@ -28,9 +28,14 @@ func Router(ts *usecase.TokenStorage) *http.ServeMux {
 
 func (th *TokenHandler) GenerateTokenPair() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Provide Get method", http.StatusMethodNotAllowed)
+			return
+		}
+
 		userID := r.PathValue("uid")
 		if userID == "" {
-			http.Error(w, "Provide user id in parameters", http.StatusInternalServerError)
+			http.Error(w, "Provide user id in parameters", http.StatusBadRequest)
 			return
 		}
 
@@ -74,15 +79,28 @@ func (th *TokenHandler) GenerateTokenPair() http.HandlerFunc {
 
 func (th *TokenHandler) Refresh() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Provide POST method", http.StatusMethodNotAllowed)
+			return
+		}
 		type tokenRequest struct {
 			UserID       string `json:"user_id"`
-			AccessToken  string `json:"access_token"`
 			RefreshToken string `json:"refresh_token"`
 		}
 		tokenReq := &tokenRequest{}
 		err := json.NewDecoder(r.Body).Decode(tokenReq)
 		if err != nil {
-			http.Error(w, "Can't decode refresh token: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't decode request, please provide valid data: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if tokenReq.RefreshToken == "" || tokenReq.UserID == "" {
+			http.Error(w, "Provide valid data", http.StatusBadRequest)
+			return
+		}
+
+		if err := usecase.ValidateUserID(tokenReq.UserID); err != nil {
+			http.Error(w, "Provide valid UUID user_id", http.StatusBadRequest)
 			return
 		}
 
@@ -94,30 +112,30 @@ func (th *TokenHandler) Refresh() http.HandlerFunc {
 
 		hashedToken, err := th.GetTokenByUserID(tokenReq.UserID)
 		if err != nil {
-			http.Error(w, "Can't get token: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't get token from db: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		err = usecase.CompareTokenAndHash(decodedRefreshToken, hashedToken)
 		if err != nil {
-			http.Error(w, "Invalid refresh token", http.StatusInternalServerError)
+			http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 			return
 		}
 
 		claims, err := auth.GetRefreshClaims(decodedRefreshToken)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't parse refresh token: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		tokenExpireAt, err := usecase.StrSecToInt(claims.ExpiresAt)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't parse refresh token: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		if ok := time.Now().Before(time.Unix(int64(tokenExpireAt), 0)); !ok {
-			http.Error(w, "Refresh token is expired", http.StatusInternalServerError)
+			http.Error(w, "Refresh token is expired", http.StatusUnauthorized)
 			return
 		}
 
