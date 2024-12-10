@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Yasuhiro-gh/jwt-app/internal/config"
 	"github.com/Yasuhiro-gh/jwt-app/internal/db"
 	"github.com/Yasuhiro-gh/jwt-app/internal/handlers"
 	"github.com/Yasuhiro-gh/jwt-app/internal/usecase"
@@ -9,7 +8,6 @@ import (
 )
 
 func Run() {
-	config.Run()
 	pdb := db.NewPostgresDB()
 	err := pdb.OpenConnection()
 	if err != nil {

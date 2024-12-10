@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"errors"
-	"github.com/Yasuhiro-gh/jwt-app/internal/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"os"
 )
 
 type PostgresDB struct {
@@ -58,7 +58,7 @@ func (pdb *PostgresDB) GetTokenByUserID(userID string) (string, error) {
 }
 
 func (pdb *PostgresDB) OpenConnection() error {
-	db, err := sql.Open("pgx", config.Options.DatabaseDSN)
+	db, err := sql.Open("pgx", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		return err
 	}

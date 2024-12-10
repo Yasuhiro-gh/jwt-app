@@ -46,7 +46,7 @@ func BuildAccessToken(userID, IPAddr string) (string, error) {
 }
 
 func BuildRefreshToken(IPAddr string) string {
-	expireAt := time.Now().Add(time.Minute * 10).Unix()
+	expireAt := time.Now().Add(time.Hour * 10).Unix()
 	strExpiresAt := strconv.FormatInt(expireAt, 10)
 	tokenWithPayload := strExpiresAt + "\n" + IPAddr
 	return tokenWithPayload

@@ -1,0 +1,27 @@
+services:
+  jwtapp:
+    container_name: jwtapp
+    image: jwtapp:1.0
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    environment:
+      DATABASE_URL: "host=jwt_db user=postgres password=postgres dbname=postgres"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - jwt_db
+  jwt_db:
+    container_name: jwt_db
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "6432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata: {}
